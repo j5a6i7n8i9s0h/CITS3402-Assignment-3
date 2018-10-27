@@ -85,10 +85,22 @@ int matrix_multiplication(Matrix*matrix_a, Matrix*matrix_b, Matrix*matrix_c)
 			if(val!=0)
 			{
 				MatrixMarket temp; 
-				temp.col = col_to_consider;
-				temp.row = row_to_consider;
-				temp.val = val;
-				mat_c[insert++] = temp;
+				bool newPos = true;
+				for(int i=0;i<insert;i++)
+				{
+					if(mat_c[i].col==col_to_consider && mat_c[i].row==row_to_consider)
+					{
+						newPos=false;
+						mat_c[i].val += val;
+					}
+				}
+				if(newPos)
+				{
+					temp.col = col_to_consider;
+					temp.row = row_to_consider;
+					temp.val = val;
+					mat_c[insert++] = temp;
+				}
 			}
 			while(bpos < matrix_b->count && mat_b[bpos].col == col_to_consider) bpos++;	
 		}
@@ -168,7 +180,7 @@ int main(int argc, char* argv[])
 		}
 		for(int i=0;i<matrix_c.count;i++)
 		{
-			printf("%f \n",matrix_c.market[i].val);
+			printf("%d %d %f \n", matrix_c.market[i].col, matrix_c.market[i].row, matrix_c.market[i].val);
 		}
 		printf("%d x %d matrix created \n", matrix_c.num_rows, matrix_c.num_cols);
 

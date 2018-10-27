@@ -66,45 +66,49 @@ int matrix_multiplication(Matrix*matrix_a, Matrix*matrix_b, Matrix*matrix_c)
 		return EXIT_FAILURE;
 	}
 	int insert=0;
-	for(int apos=0;apos<matrix_a->count;)
+	#pragma omp parallel
 	{
-		int row_to_consider =  mat_a[apos].row;
-		for(int bpos =0 ; bpos<matrix_b->count;)
+		#pragma omp for
+		for(int apos=0;apos<matrix_a->count;)
 		{
-			int col_to_consider = mat_b[bpos].col;
-			int temp_a = apos;
-			int temp_b = bpos;
+			int row_to_consider =  mat_a[apos].row;
+			for(int bpos =0 ; bpos<matrix_b->count;)
+			{
+				int col_to_consider = mat_b[bpos].col;
+				int temp_a = apos;
+				int temp_b = bpos;
 
-			float val = 0.0;
-			while(temp_a < matrix_a->count && mat_a[temp_a].row == row_to_consider && temp_b < matrix_b->count && mat_b[temp_b].col == col_to_consider)
-			{
-				if(mat_a[temp_a].col < mat_b[temp_b].row) temp_a++;
-				else if(mat_a[temp_a].col > mat_b[temp_b].row) temp_b++;
-				else val += mat_a[temp_a++].val*mat_b[temp_b++].val;
-			}
-			if(val!=0)
-			{
-				MatrixMarket temp; 
-				bool newPos = true;
-				for(int i=0;i<insert;i++)
+				float val = 0.0;
+				while(temp_a < matrix_a->count && mat_a[temp_a].row == row_to_consider && temp_b < matrix_b->count && mat_b[temp_b].col == col_to_consider)
 				{
-					if(mat_c[i].col==col_to_consider && mat_c[i].row==row_to_consider)
+					if(mat_a[temp_a].col < mat_b[temp_b].row) temp_a++;
+					else if(mat_a[temp_a].col > mat_b[temp_b].row) temp_b++;
+					else val += mat_a[temp_a++].val*mat_b[temp_b++].val;
+				}
+				if(val!=0)
+				{
+					MatrixMarket temp; 
+					bool newPos = true;
+					for(int i=0;i<insert;i++)
 					{
-						newPos=false;
-						mat_c[i].val += val;
+						if(mat_c[i].col==col_to_consider && mat_c[i].row==row_to_consider)
+						{
+							newPos=false;
+							mat_c[i].val += val;
+						}
+					}
+					if(newPos)
+					{
+						temp.col = col_to_consider;
+						temp.row = row_to_consider;
+						temp.val = val;
+						mat_c[insert++] = temp;
 					}
 				}
-				if(newPos)
-				{
-					temp.col = col_to_consider;
-					temp.row = row_to_consider;
-					temp.val = val;
-					mat_c[insert++] = temp;
-				}
+				while(bpos < matrix_b->count && mat_b[bpos].col == col_to_consider) bpos++;	
 			}
-			while(bpos < matrix_b->count && mat_b[bpos].col == col_to_consider) bpos++;	
+			while(apos < matrix_a->count && mat_a[apos].row == row_to_consider) apos++;
 		}
-		while(apos < matrix_a->count && mat_a[apos].row == row_to_consider) apos++;
 	}
 	matrix_c->market=mat_c;
 	matrix_c->count=insert;

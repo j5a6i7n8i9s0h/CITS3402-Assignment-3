@@ -3,7 +3,7 @@
 #include <omp.h>
 #include<stdbool.h>
 
-
+//sort -k1 -k2 -n on files pre run
 typedef struct {
 	int row; 
 	int col;
@@ -141,7 +141,7 @@ int main(int argc, char* argv[])
 		}
 		for(int i=0;i<matrix_a.count;i++)
 		{
-			printf("%f \n",matrix_a.market[i].val);
+			//printf("%d %d %f \n", matrix_a.market[i].row, matrix_a.market[i].col, matrix_a.market[i].val);
 		}
 		printf("%d valid entries \n", matrix_a.count);
 		printf("%d x %d matrix created \n", matrix_a.num_rows, matrix_a.num_cols);
@@ -160,7 +160,7 @@ int main(int argc, char* argv[])
 
 		for(int i=0;i<matrix_b.count;i++)
 		{
-			printf("%f \n",matrix_b.market[i].val);
+		//	printf("%d %d %f \n", matrix_b.market[i].row, matrix_b.market[i].col, matrix_b.market[i].val);
 		}
 		printf("%d valid entries \n", matrix_b.count);
 		printf("%d x %d matrix created \n", matrix_b.num_rows, matrix_b.num_cols);
@@ -173,16 +173,17 @@ int main(int argc, char* argv[])
 		}
 		matrix_c.num_rows = matrix_a.num_rows;
 		matrix_c.num_cols = matrix_b.num_cols;
-		//matrix_c.count = matrix_a.count;
+		matrix_c.count = 0;
 		if(matrix_multiplication(&matrix_a,&matrix_b,&matrix_c)==EXIT_FAILURE)
 		{	
+			printf("couldnt multiply matrices \n");
 			return EXIT_FAILURE;
 		}
 		for(int i=0;i<matrix_c.count;i++)
 		{
-			printf("%d %d %f \n", matrix_c.market[i].col, matrix_c.market[i].row, matrix_c.market[i].val);
+			printf("%d %d %f \n", matrix_c.market[i].row, matrix_c.market[i].col, matrix_c.market[i].val);
 		}
-		printf("%d x %d matrix created \n", matrix_c.num_rows, matrix_c.num_cols);
+		printf("%d x %d matrix created: %d enties : multiplication success \n", matrix_c.num_rows, matrix_c.num_cols, matrix_c.count);
 
 	}
 	else

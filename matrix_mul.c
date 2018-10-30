@@ -29,7 +29,7 @@ int getLineCount(FILE *file)
 	return lines; 
 }
 
-int createMatrixFromFile(Matrix *matrix, FILE *file)
+void createMatrixFromFile(Matrix *matrix, FILE *file)
 {
 	char buff[BUFSIZ];
 	int row;
@@ -43,7 +43,7 @@ int createMatrixFromFile(Matrix *matrix, FILE *file)
 	if(matrix->market == NULL)
 	{
 		fprintf(stderr,"Failure to allocate memory\n");
-		return EXIT_FAILURE;
+		exit(EXIT_FAILURE);
 	}
 
 	matrix->count = count;
@@ -59,11 +59,9 @@ int createMatrixFromFile(Matrix *matrix, FILE *file)
 		temp.val = val;
 		matrix->market[i++] = temp;
 	}
-
-	return 0;
 }
 
-int matrix_multiplication(Matrix *matrix_a, Matrix *matrix_b, Matrix *matrix_c)
+void matrix_multiplication(Matrix *matrix_a, Matrix *matrix_b, Matrix *matrix_c)
 {
 	MatrixMarket *mat_a = matrix_a->market;
 	MatrixMarket *mat_b = matrix_b->market;
@@ -72,7 +70,7 @@ int matrix_multiplication(Matrix *matrix_a, Matrix *matrix_b, Matrix *matrix_c)
 	if(mat_c == NULL)
 	{
 		fprintf(stderr,"Failed to allocate memory\n");
-		return EXIT_FAILURE;
+		exit(EXIT_FAILURE);
 	}
 
 	int apos, row_to_consider, insert = 0;
@@ -95,7 +93,7 @@ int matrix_multiplication(Matrix *matrix_a, Matrix *matrix_b, Matrix *matrix_c)
 			{
 				if(mat_a[temp_a].col < mat_b[temp_b].row) temp_a++;
 				else if(mat_a[temp_a].col > mat_b[temp_b].row) temp_b++;
-				else val += mat_a[temp_a++].val*mat_b[temp_b++].val;
+				else val += (mat_a[temp_a++].val * mat_b[temp_b++].val);
 			}
 			if(val != 0)
 			{
@@ -126,18 +124,16 @@ int matrix_multiplication(Matrix *matrix_a, Matrix *matrix_b, Matrix *matrix_c)
 
 	matrix_c->market = mat_c;
 	matrix_c->count = insert;
-
-	return EXIT_SUCCESS;
 }
 
 int main(int argc, char* argv[])
 {
-	if(argc < 2 || argc > 3)
+	if(argc != 3)
+	{
+		fprintf(stderr, "The program requires three arguements\n");
 		return EXIT_FAILURE;
+	}
 
-	MPI_Init(&argc, &argv);
-	MPI_Comm_size(MPI_COMM_WORLD, &num_process);
-	MPI_Comm_rank(MPI_COMM_WORLD, &id);
 
 	FILE *file, *file_2;
 	bool f_exists;
@@ -147,11 +143,6 @@ int main(int argc, char* argv[])
 		file = fopen(argv[1], "r");
 		file_2 = fopen(argv[2],"r");
 		f_exists = file != NULL && file_2 != NULL;
-	}
-	else if(argc == 2)
-	{
-		file = fopen(argv[1], "r");
-		f_exists = file != NULL;
 	}
 
 	if(!f_exists)
@@ -170,17 +161,7 @@ int main(int argc, char* argv[])
 	matrix_a.num_rows = 0;
 	matrix_a.num_cols = 0;
 
-	if(createMatrixFromFile(&matrix_a, file) == EXIT_FAILURE)
-	{
-		fprintf(stderr, "FAILED  \n");
-		MPI_Finalize();
-		return EXIT_FAILURE;
-	}
-
-	for(int i = 0; i < matrix_a.count; i++)
-	{
-		//printf("%d %d %f \n", matrix_a.market[i].row, matrix_a.market[i].col, matrix_a.market[i].val);
-	}
+	createMatrixFromFile(&matrix_a, file);
 
 	printf("%d valid entries \n", matrix_a.count);
 	printf("%d x %d matrix created \n", matrix_a.num_rows, matrix_a.num_cols);
@@ -189,21 +170,12 @@ int main(int argc, char* argv[])
 	matrix_b.num_rows = 0;
 	matrix_b.num_cols = 0;
 
-	if(createMatrixFromFile(&matrix_b, file_2) == EXIT_FAILURE)
-	{
-		fprintf(stderr, "FAILED  \n");
-		MPI_Finalize();
-		return EXIT_FAILURE;
-	}
-
-	for(int i = 0; i < matrix_b.count; i++)
-	{
-	//	printf("%d %d %f \n", matrix_b.market[i].row, matrix_b.market[i].col, matrix_b.market[i].val);
-	}
+	createMatrixFromFile(&matrix_b, file_2);
 
 	printf("%d valid entries \n", matrix_b.count);
 	printf("%d x %d matrix created \n", matrix_b.num_rows, matrix_b.num_cols);
 
+	
 	Matrix matrix_c;
 	if(matrix_a.num_cols != matrix_b.num_rows)
 	{
@@ -215,12 +187,11 @@ int main(int argc, char* argv[])
 	matrix_c.num_cols = matrix_b.num_cols;
 	matrix_c.count = 0;
 
-	if(matrix_multiplication(&matrix_a,&matrix_b,&matrix_c) == EXIT_FAILURE)
-	{	
-		printf("couldnt multiply matrices \n");
-		MPI_Finalize();
-		return EXIT_FAILURE;
-	}
+	MPI_Init(&argc, &argv);
+	MPI_Comm_size(MPI_COMM_WORLD, &num_process);
+	MPI_Comm_rank(MPI_COMM_WORLD, &id);
+	
+	matrix_multiplication(&matrix_a,&matrix_b,&matrix_c);
 
 	for(int i = 0; i < matrix_c.count; i++)
 	{

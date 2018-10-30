@@ -5,6 +5,9 @@
 #include <mpi.h>
 
 // sort -k1 -k2 -n on files pre run
+
+int num_process, id;
+
 typedef struct {
 	int row; 
 	int col;
@@ -15,10 +18,10 @@ typedef struct {
 	int num_rows; 
 	int num_cols;
 	int count; 
-	MatrixMarket*market;
+	MatrixMarket *market;
 } Matrix;
 
-int getLineCount(FILE*file)
+int getLineCount(FILE *file)
 {
 	int lines = 0;
 	while(!feof(file))
@@ -26,7 +29,7 @@ int getLineCount(FILE*file)
 	return lines; 
 }
 
-int createMatrixFromFile(Matrix*matrix, FILE*file)
+int createMatrixFromFile(Matrix *matrix, FILE *file)
 {
 	char buff[BUFSIZ];
 	int row;
@@ -57,10 +60,10 @@ int createMatrixFromFile(Matrix*matrix, FILE*file)
 		matrix->market[i++] = temp;
 	}
 
-	return EXIT_SUCCESS;
+	return 0;
 }
 
-int matrix_multiplication(Matrix*matrix_a, Matrix*matrix_b, Matrix*matrix_c)
+int matrix_multiplication(Matrix *matrix_a, Matrix *matrix_b, Matrix *matrix_c)
 {
 	MatrixMarket *mat_a = matrix_a->market;
 	MatrixMarket *mat_b = matrix_b->market;
@@ -72,56 +75,55 @@ int matrix_multiplication(Matrix*matrix_a, Matrix*matrix_b, Matrix*matrix_c)
 		return EXIT_FAILURE;
 	}
 
-	int insert = 0;
-	#pragma omp parallel
+	int apos, row_to_consider, insert = 0;
+
+	#pragma omp parallel for colapse(2) private(apos) shared(insert, row_to_consider)
+	for(apos = 0; apos < matrix_a->count; )
 	{
-		#pragma omp for
-		for(int apos = 0; apos < matrix_a->count; )
+		for(int bpos = 0; bpos < matrix_b->count; )
 		{
-			int row_to_consider =  mat_a[apos].row;
-			for(int bpos = 0; bpos < matrix_b->count; )
+			row_to_consider =  mat_a[apos].row;
+			int col_to_consider = mat_b[bpos].col;
+			int temp_a = apos;
+			int temp_b = bpos;
+
+			float val = 0.0;
+			while(temp_a < matrix_a->count
+				&& mat_a[temp_a].row == row_to_consider
+				&& temp_b < matrix_b->count
+				&& mat_b[temp_b].col == col_to_consider)
 			{
-				int col_to_consider = mat_b[bpos].col;
-				int temp_a = apos;
-				int temp_b = bpos;
-
-				float val = 0.0;
-				while(temp_a < matrix_a->count
-					&& mat_a[temp_a].row == row_to_consider
-					&& temp_b < matrix_b->count
-					&& mat_b[temp_b].col == col_to_consider)
-				{
-					if(mat_a[temp_a].col < mat_b[temp_b].row) temp_a++;
-					else if(mat_a[temp_a].col > mat_b[temp_b].row) temp_b++;
-					else val += mat_a[temp_a++].val*mat_b[temp_b++].val;
-				}
-				if(val != 0)
-				{
-					MatrixMarket temp; 
-					bool newPos = true;
-
-					for(int i = 0; i < insert; i++)
-					{
-						if(mat_c[i].col == col_to_consider && mat_c[i].row == row_to_consider)
-						{
-							newPos = false;
-							mat_c[i].val += val;
-						}
-					}
-
-					if(newPos)
-					{
-						temp.col = col_to_consider;
-						temp.row = row_to_consider;
-						temp.val = val;
-						mat_c[insert++] = temp;
-					}
-				}
-				while(bpos < matrix_b->count && mat_b[bpos].col == col_to_consider) bpos++;	
+				if(mat_a[temp_a].col < mat_b[temp_b].row) temp_a++;
+				else if(mat_a[temp_a].col > mat_b[temp_b].row) temp_b++;
+				else val += mat_a[temp_a++].val*mat_b[temp_b++].val;
 			}
-			while(apos < matrix_a->count && mat_a[apos].row == row_to_consider) apos++;
+			if(val != 0)
+			{
+				MatrixMarket temp; 
+				bool newPos = true;
+
+				for(int i = 0; i < insert; i++)
+				{
+					if(mat_c[i].col == col_to_consider && mat_c[i].row == row_to_consider)
+					{
+						newPos = false;
+						mat_c[i].val += val;
+					}
+				}
+
+				if(newPos)
+				{
+					temp.col = col_to_consider;
+					temp.row = row_to_consider;
+					temp.val = val;
+					mat_c[insert++] = temp;
+				}
+			}
+			while(bpos < matrix_b->count && mat_b[bpos].col == col_to_consider) bpos++;	
 		}
+		while(apos < matrix_a->count && mat_a[apos].row == row_to_consider) apos++;
 	}
+
 	matrix_c->market = mat_c;
 	matrix_c->count = insert;
 
@@ -130,6 +132,13 @@ int matrix_multiplication(Matrix*matrix_a, Matrix*matrix_b, Matrix*matrix_c)
 
 int main(int argc, char* argv[])
 {
+	if(argc < 2 || argc > 3)
+		return EXIT_FAILURE;
+
+	MPI_Init(&argc, &argv);
+	MPI_Comm_size(MPI_COMM_WORLD, &num_process);
+	MPI_Comm_rank(MPI_COMM_WORLD, &id);
+
 	FILE *file, *file_2;
 	bool f_exists;
 
@@ -152,6 +161,7 @@ int main(int argc, char* argv[])
 		fclose(file);
 		fclose(file_2);
 
+		MPI_Finalize();
 		return EXIT_FAILURE;
 
 	}
@@ -163,6 +173,7 @@ int main(int argc, char* argv[])
 	if(createMatrixFromFile(&matrix_a, file) == EXIT_FAILURE)
 	{
 		fprintf(stderr, "FAILED  \n");
+		MPI_Finalize();
 		return EXIT_FAILURE;
 	}
 
@@ -174,9 +185,6 @@ int main(int argc, char* argv[])
 	printf("%d valid entries \n", matrix_a.count);
 	printf("%d x %d matrix created \n", matrix_a.num_rows, matrix_a.num_cols);
 
-	if(argc != 3)
-		return EXIT_FAILURE;
-
 	Matrix matrix_b;
 	matrix_b.num_rows = 0;
 	matrix_b.num_cols = 0;
@@ -184,6 +192,7 @@ int main(int argc, char* argv[])
 	if(createMatrixFromFile(&matrix_b, file_2) == EXIT_FAILURE)
 	{
 		fprintf(stderr, "FAILED  \n");
+		MPI_Finalize();
 		return EXIT_FAILURE;
 	}
 
@@ -199,6 +208,7 @@ int main(int argc, char* argv[])
 	if(matrix_a.num_cols != matrix_b.num_rows)
 	{
 		fprintf(stderr, "Invalid dimensions to multiply\n");
+		MPI_Finalize();
 		return EXIT_FAILURE;
 	}
 	matrix_c.num_rows = matrix_a.num_rows;
@@ -208,6 +218,7 @@ int main(int argc, char* argv[])
 	if(matrix_multiplication(&matrix_a,&matrix_b,&matrix_c) == EXIT_FAILURE)
 	{	
 		printf("couldnt multiply matrices \n");
+		MPI_Finalize();
 		return EXIT_FAILURE;
 	}
 
@@ -220,5 +231,6 @@ int main(int argc, char* argv[])
 	fclose(file);
 	fclose(file_2);
 
+	MPI_Finalize();
 	return EXIT_SUCCESS;
 }

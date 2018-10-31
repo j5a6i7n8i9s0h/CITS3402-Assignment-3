@@ -198,7 +198,12 @@ int main(int argc, char* argv[])
 	// }
 
 	/* create a type for struct car */
-    const int nitems=3;
+	matrix_c.num_rows = matrix_a.num_rows;
+	matrix_c.num_cols = matrix_b.num_cols;
+	matrix_c.count = 0;
+	// ______________________________________________ // 
+	MPI_Init(&argc, &argv);
+	const int nitems=3;
     int          blocklengths[3] = {1,1,1};
     MPI_Datatype types[3] = {MPI_INT, MPI_INT, MPI_FLOAT};
     MPI_Datatype mpi_matrix_market;
@@ -211,11 +216,6 @@ int main(int argc, char* argv[])
     MPI_Type_create_struct(nitems, blocklengths, offsets, types, &mpi_matrix_market);
     MPI_Type_commit(&mpi_matrix_market);
 
-	matrix_c.num_rows = matrix_a.num_rows;
-	matrix_c.num_cols = matrix_b.num_cols;
-	matrix_c.count = 0;
-	// ______________________________________________ // 
-	MPI_Init(&argc, &argv);
 	MPI_Comm_size(MPI_COMM_WORLD, &numtasks);
 	MPI_Comm_rank(MPI_COMM_WORLD, &taskid);
 

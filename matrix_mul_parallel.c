@@ -9,7 +9,8 @@
 #define FROM_WORKER 2 /* setting a message type */
 // sort -k1 -k2 -n on files pre run
 
-int numtasks, taskid, numworkers, source, dest, mtype, rows, averow, extra, offset,i,j,k,rc;
+int numtasks, taskid, numworkers, source, dest, mtype;
+int  rows, averow, extra, offset,i,j,k,rc;
 MPI_Status status;
 
 typedef struct {
@@ -218,15 +219,13 @@ int main(int argc, char* argv[])
 
 	MPI_Comm_size(MPI_COMM_WORLD, &numtasks);
 	MPI_Comm_rank(MPI_COMM_WORLD, &taskid);
-
+	numworkers = numtasks - 1; 
 	if (numtasks < 2 ) {
 		printf("Need at least two MPI tasks. Quitting...\n");
 		MPI_Abort(MPI_COMM_WORLD, rc);
 		exit(EXIT_FAILURE);
 	}
-
-	numworkers = numtasks - 1; 
-
+	printf("there are %d tasks ====== \n", numtasks);
 	if(taskid == MASTER)
 	{
 		printf("%d valid entries \n", matrix_b.count);
@@ -242,14 +241,19 @@ int main(int argc, char* argv[])
 			rows = (dest <= extra)? averow +1: averow;
 			printf("Sending %d rows to task %d offset=%d\n", rows,dest,offset);
 			MPI_Send(&offset, 1, MPI_INT, dest, mtype, MPI_COMM_WORLD); 
+			//printf("offset from master %d\n",offset);
 			MPI_Send(&rows, 1, MPI_INT, dest, mtype, MPI_COMM_WORLD);
-			MPI_Send(&matrix_a.market[0], rows, mpi_matrix_market, dest, mtype, MPI_COMM_WORLD);
-			MPI_Send(&matrix_b.market[0], matrix_b.count, mpi_matrix_market, dest, mtype, MPI_COMM_WORLD);
+			printf("rows %d \n", rows);
+			MPI_Send(&matrix_a.market, rows, mpi_matrix_market, dest, mtype, MPI_COMM_WORLD);
+			printf("HEEEEEEEE\n");
+			MPI_Send(&matrix_b.market, matrix_b.count, mpi_matrix_market, dest, mtype, MPI_COMM_WORLD);
 			offset +=rows;
 		}
+		//printf("y no wok\n");
 		mtype = FROM_WORKER;
 		for(i=1; i <= numworkers; ++i)
 		{
+			printf("GOT HERE 2");
 			source =i; 
 			MPI_Recv(&offset, 1, MPI_INT, source, mtype, MPI_COMM_WORLD, &status);
 			MPI_Recv(&rows, 1, MPI_INT, source, mtype, MPI_COMM_WORLD, &status);
@@ -262,10 +266,13 @@ int main(int argc, char* argv[])
 	{
 		mtype = FROM_MASTER;
 		MPI_Recv(&offset, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD, &status);
+		printf("offset %d \n",offset);
 		MPI_Recv(&rows, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD, &status);
+		printf("rows");
 		MPI_Recv(&matrix_a.market, rows, mpi_matrix_market, MASTER, mtype, MPI_COMM_WORLD, &status);
+		printf("matrix_a");
 		MPI_Recv(&matrix_b.market, matrix_b.count, mpi_matrix_market, MASTER, mtype, MPI_COMM_WORLD, &status);
-		
+		printf("GOT HERE 1");
 		MatrixMarket *mat_a = matrix_a.market;
 		MatrixMarket *mat_b = matrix_b.market;
 		int apos, row_to_consider, insert = 0;
@@ -277,7 +284,7 @@ int main(int argc, char* argv[])
 				int col_to_consider = mat_b[bpos].col;
 				int temp_a = apos;
 				int temp_b = bpos;
-
+				printf("GOT HERE 5");
 				float val = 0.0;
 				while(temp_a < rows
 					&& mat_a[temp_a].row == row_to_consider
@@ -322,7 +329,8 @@ int main(int argc, char* argv[])
 		MPI_Send(&offset, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD);
 		MPI_Send(&rows, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD);
 		//MPI_Send(&matrix_c.market, matr)
-	} 
+	}
+	MPI_Type_free(&mpi_matrix_market); 
 	MPI_Finalize();
 	
 //	matrix_multiplication(&matrix_a,&matrix_b,&matrix_c);

@@ -196,6 +196,21 @@ int main(int argc, char* argv[])
 	// 	//MPI_Finalize();
 	// 	return EXIT_FAILURE;
 	// }
+
+	/* create a type for struct car */
+    const int nitems=3;
+    int          blocklengths[3] = {1,1,1};
+    MPI_Datatype types[3] = {MPI_INT, MPI_INT, MPI_FLOAT};
+    MPI_Datatype mpi_matrix_market;
+    MPI_Aint     offsets[3];
+
+    offsets[0] = offsetof(MatrixMarket, row);
+    offsets[1] = offsetof(MatrixMarket, col);
+    offsets[2] = offsetof(MatrixMarket, val);
+
+    MPI_Type_create_struct(nitems, blocklengths, offsets, types, &mpi_matrix_market);
+    MPI_Type_commit(&mpi_matrix_market);
+
 	matrix_c.num_rows = matrix_a.num_rows;
 	matrix_c.num_cols = matrix_b.num_cols;
 	matrix_c.count = 0;
@@ -228,8 +243,8 @@ int main(int argc, char* argv[])
 			printf("Sending %d rows to task %d offset=%d\n", rows,dest,offset);
 			MPI_Send(&offset, 1, MPI_INT, dest, mtype, MPI_COMM_WORLD); 
 			MPI_Send(&rows, 1, MPI_INT, dest, mtype, MPI_COMM_WORLD);
-			MPI_Send(&matrix_a.market[0], rows, MPI_FLOAT, dest, mtype, MPI_COMM_WORLD);
-			MPI_Send(&matrix_b.market[0], matrix_b.count, MPI_FLOAT, dest, mtype, MPI_COMM_WORLD);
+			MPI_Send(&matrix_a.market[0], rows, mpi_matrix_market, dest, mtype, MPI_COMM_WORLD);
+			MPI_Send(&matrix_b.market[0], matrix_b.count, mpi_matrix_market, dest, mtype, MPI_COMM_WORLD);
 			offset +=rows;
 		}
 		mtype = FROM_WORKER;
@@ -238,7 +253,7 @@ int main(int argc, char* argv[])
 			source =i; 
 			MPI_Recv(&offset, 1, MPI_INT, source, mtype, MPI_COMM_WORLD, &status);
 			MPI_Recv(&rows, 1, MPI_INT, source, mtype, MPI_COMM_WORLD, &status);
-			MPI_Recv(&matrix_c.market[offset], rows, MPI_FLOAT, source, mtype, MPI_COMM_WORLD, &status);
+			MPI_Recv(&matrix_c.market[offset], rows, mpi_matrix_market, source, mtype, MPI_COMM_WORLD, &status);
 			printf("Received results from task %d\n",source);
 		}
 	}
@@ -248,8 +263,8 @@ int main(int argc, char* argv[])
 		mtype = FROM_MASTER;
 		MPI_Recv(&offset, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD, &status);
 		MPI_Recv(&rows, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD, &status);
-		MPI_Recv(&matrix_a.market, rows, MPI_FLOAT, MASTER, mtype, MPI_COMM_WORLD, &status);
-		MPI_Recv(&matrix_b.market, matrix_b.count, MPI_FLOAT, MASTER, mtype, MPI_COMM_WORLD, &status);
+		MPI_Recv(&matrix_a.market, rows, mpi_matrix_market, MASTER, mtype, MPI_COMM_WORLD, &status);
+		MPI_Recv(&matrix_b.market, matrix_b.count, mpi_matrix_market, MASTER, mtype, MPI_COMM_WORLD, &status);
 		
 		MatrixMarket *mat_a = matrix_a.market;
 		MatrixMarket *mat_b = matrix_b.market;

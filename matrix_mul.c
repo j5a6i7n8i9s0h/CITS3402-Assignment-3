@@ -75,7 +75,7 @@ void matrix_multiplication(Matrix *matrix_a, Matrix *matrix_b, Matrix *matrix_c)
 
 	int apos, row_to_consider, insert = 0;
 
-	#pragma omp parallel for colapse(2) private(apos) shared(insert, row_to_consider)
+	#pragma omp parallel for private(apos) shared(insert, row_to_consider)
 	for(apos = 0; apos < matrix_a->count; )
 	{
 		for(int bpos = 0; bpos < matrix_b->count; )
@@ -190,18 +190,19 @@ int main(int argc, char* argv[])
 	MPI_Init(&argc, &argv);
 	MPI_Comm_size(MPI_COMM_WORLD, &num_process);
 	MPI_Comm_rank(MPI_COMM_WORLD, &id);
-	
+
 	matrix_multiplication(&matrix_a,&matrix_b,&matrix_c);
 
 	for(int i = 0; i < matrix_c.count; i++)
 	{
 		printf("%d %d %f \n", matrix_c.market[i].row, matrix_c.market[i].col, matrix_c.market[i].val);
 	}
-	printf("%d x %d matrix created: %d enties : multiplication success \n", matrix_c.num_rows, matrix_c.num_cols, matrix_c.count);
+	printf("\n%d x %d matrix created: %d enties : multiplication success \n", matrix_c.num_rows, matrix_c.num_cols, matrix_c.count);
+
+	MPI_Finalize();
 
 	fclose(file);
 	fclose(file_2);
-
-	MPI_Finalize();
+	
 	return EXIT_SUCCESS;
 }

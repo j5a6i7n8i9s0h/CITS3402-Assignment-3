@@ -1,8 +1,10 @@
-#include <stdio.h> 
-#include <stdlib.h> 
-#include <stdbool.h>
+#include <iostream>
+#include <fstream>
+#include <string>
 #include <omp.h>
-#include <mpi.h>
+// #include <mpi.h>
+
+using namespace std;
 
 // sort -k1 -k2 -n on files pre run
 
@@ -11,7 +13,7 @@ int num_process, id;
 typedef struct {
 	int row; 
 	int col;
-	float val; 
+	double val; 
 } MatrixMarket;
 
 typedef struct {
@@ -21,20 +23,22 @@ typedef struct {
 	MatrixMarket *market;
 } Matrix;
 
-int getLineCount(FILE *file)
+int getLineCount(ifstream &file)
 {
-	int lines = 0;
-	while(!feof(file))
-		lines = (fgetc(file) == '\n') ? lines+1 : lines; 
-	return lines; 
+	string line;
+	int count_line = 0;
+
+	while (getline(file, line))	count_line++;
+
+	return count_line; 
 }
 
-void createMatrixFromFile(Matrix *matrix, FILE *file)
+void createMatrixFromFile(Matrix *matrix, ifstream &file)
 {
-	char buff[BUFSIZ];
+	string buff;
 	int row;
 	int col; 
-	float val;
+	double val;
 	int i = 0;
 	int count = getLineCount(file);
 	MatrixMarket temp;
@@ -42,23 +46,27 @@ void createMatrixFromFile(Matrix *matrix, FILE *file)
 
 	if(matrix->market == NULL)
 	{
-		fprintf(stderr,"Failure to allocate memory\n");
+		cerr << "Failure to allocate memory\n";
 		exit(EXIT_FAILURE);
 	}
 
 	matrix->count = count;
-	fseek(file, 0, SEEK_SET);
 
-	while(fgets(buff, BUFSIZ, file) != NULL)
-	{
-		sscanf(buff,"%d %d %f", &row, &col, &val);
-		matrix->num_cols = (matrix->num_cols < col) ? col : matrix->num_cols;
-		matrix->num_rows = (matrix->num_rows < row) ? row : matrix->num_rows;
-		temp.row = row;
-		temp.col = col;
-		temp.val = val;
-		matrix->market[i++] = temp;
-	}
+	file.clear();
+	file.seekg(0, ios::beg);
+
+	if(file.is_open())
+		while(file >> row >> col >> val)
+			if (row != 0 && col != 0)
+			{
+				temp.row = row;
+				temp.col = col;
+				temp.val = val;
+
+				matrix->num_cols = (matrix->num_cols < col) ? col : matrix->num_cols;
+				matrix->num_rows = (matrix->num_rows < row) ? row : matrix->num_rows;
+				matrix->market[i++] = temp;
+			}
 }
 
 void matrix_multiplication(Matrix *matrix_a, Matrix *matrix_b, Matrix *matrix_c)
@@ -69,13 +77,13 @@ void matrix_multiplication(Matrix *matrix_a, Matrix *matrix_b, Matrix *matrix_c)
 
 	if(mat_c == NULL)
 	{
-		fprintf(stderr,"Failed to allocate memory\n");
+		cerr << "Failed to allocate memory\n";
 		exit(EXIT_FAILURE);
 	}
 
 	int apos, row_to_consider, insert = 0;
 
-	#pragma omp parallel for colapse(2) private(apos) shared(insert, row_to_consider)
+	#pragma omp parallel for private(apos) shared(insert, row_to_consider)
 	for(apos = 0; apos < matrix_a->count; )
 	{
 		for(int bpos = 0; bpos < matrix_b->count; )
@@ -84,8 +92,7 @@ void matrix_multiplication(Matrix *matrix_a, Matrix *matrix_b, Matrix *matrix_c)
 			int col_to_consider = mat_b[bpos].col;
 			int temp_a = apos;
 			int temp_b = bpos;
-
-			float val = 0.0;
+			double val = 0.0;
 			while(temp_a < matrix_a->count
 				&& mat_a[temp_a].row == row_to_consider
 				&& temp_b < matrix_b->count
@@ -126,35 +133,32 @@ void matrix_multiplication(Matrix *matrix_a, Matrix *matrix_b, Matrix *matrix_c)
 	matrix_c->count = insert;
 }
 
+void close_files(ifstream &file1, ifstream &file2)
+{
+	file1.close();
+	file2.close();
+}
+
 int main(int argc, char* argv[])
 {
 	if(argc != 3)
 	{
-		fprintf(stderr, "The program requires three arguements\n");
+		cerr << "The program requires three arguements\n";
 		return EXIT_FAILURE;
 	}
 
+	ifstream file(argv[1]);
+	ifstream file_2(argv[2]);
 
-	FILE *file, *file_2;
-	bool f_exists;
-
-	if(argc == 3)
-	{
-		file = fopen(argv[1], "r");
-		file_2 = fopen(argv[2],"r");
-		f_exists = file != NULL && file_2 != NULL;
-	}
+	bool f_exists = file && file_2;
 
 	if(!f_exists)
 	{
-		fprintf(stderr, "Invalid file provided \n");
+		cerr << "Invalid file(s) provided \n";
 
-		fclose(file);
-		fclose(file_2);
+		close_files(file, file_2);
 
-		MPI_Finalize();
 		return EXIT_FAILURE;
-
 	}
 	
 	Matrix matrix_a;
@@ -163,8 +167,8 @@ int main(int argc, char* argv[])
 
 	createMatrixFromFile(&matrix_a, file);
 
-	printf("%d valid entries \n", matrix_a.count);
-	printf("%d x %d matrix created \n", matrix_a.num_rows, matrix_a.num_cols);
+	cout << matrix_a.count << " valid entries \n";
+	cout << matrix_a.num_rows << " x " << matrix_a.num_cols << " matrix created \n";
 
 	Matrix matrix_b;
 	matrix_b.num_rows = 0;
@@ -172,36 +176,36 @@ int main(int argc, char* argv[])
 
 	createMatrixFromFile(&matrix_b, file_2);
 
-	printf("%d valid entries \n", matrix_b.count);
-	printf("%d x %d matrix created \n", matrix_b.num_rows, matrix_b.num_cols);
+	cout << matrix_b.count << " valid entries \n";
+	cout << matrix_b.num_rows << " x " << matrix_b.num_cols << " matrix created \n";
 
-	
-	Matrix matrix_c;
+	close_files(file, file_2);
+
 	if(matrix_a.num_cols != matrix_b.num_rows)
 	{
-		fprintf(stderr, "Invalid dimensions to multiply\n");
-		MPI_Finalize();
+		cerr << "Invalid dimensions to multiply\n";
 		return EXIT_FAILURE;
 	}
+
+	Matrix matrix_c;
 	matrix_c.num_rows = matrix_a.num_rows;
 	matrix_c.num_cols = matrix_b.num_cols;
 	matrix_c.count = 0;
 
-	MPI_Init(&argc, &argv);
-	MPI_Comm_size(MPI_COMM_WORLD, &num_process);
-	MPI_Comm_rank(MPI_COMM_WORLD, &id);
+	// MPI_Init(&argc, &argv);
+	// MPI_Comm_size(MPI_COMM_WORLD, &num_process);
+	// MPI_Comm_rank(MPI_COMM_WORLD, &id);
 	
-	matrix_multiplication(&matrix_a,&matrix_b,&matrix_c);
+	matrix_multiplication(&matrix_a, &matrix_b, &matrix_c);
 
 	for(int i = 0; i < matrix_c.count; i++)
 	{
-		printf("%d %d %f \n", matrix_c.market[i].row, matrix_c.market[i].col, matrix_c.market[i].val);
+		cout << matrix_c.market[i].row << " " << matrix_c.market[i].col << " " << matrix_c.market[i].val << "\n";
 	}
-	printf("%d x %d matrix created: %d enties : multiplication success \n", matrix_c.num_rows, matrix_c.num_cols, matrix_c.count);
 
-	fclose(file);
-	fclose(file_2);
+	cout << matrix_c.num_rows << " x " << matrix_c.num_cols << "matrix created: " << matrix_c.count << " enties : multiplication success\n";
 
-	MPI_Finalize();
+	// MPI_Finalize();
+	
 	return EXIT_SUCCESS;
 }

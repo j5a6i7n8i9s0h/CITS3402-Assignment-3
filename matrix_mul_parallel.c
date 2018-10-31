@@ -2,11 +2,15 @@
 #include <stdlib.h> 
 #include <stdbool.h>
 #include <omp.h>
-// #include <mpi.h>
+#include <mpi.h>
 
+#define MASTER 0
+#define FROM_MASTER 1 /* setting a message type */
+#define FROM_WORKER 2 /* setting a message type */
 // sort -k1 -k2 -n on files pre run
 
-int num_process, id;
+int numtasks, taskid, numworkers, source, dest, mtype, rows, averow, extra, offset,i,j,k,rc;
+MPI_Status status;
 
 typedef struct {
 	int row; 
@@ -27,6 +31,11 @@ int getLineCount(FILE *file)
 	while(!feof(file))
 		lines = (fgetc(file) == '\n') ? lines+1 : lines; 
 	return lines; 
+}
+
+void clearMatrixFromMemory(Matrix mat)
+{
+	free(mat.market);
 }
 
 void createMatrixFromFile(Matrix *matrix, FILE *file)
@@ -75,7 +84,7 @@ void matrix_multiplication(Matrix *matrix_a, Matrix *matrix_b, Matrix *matrix_c)
 
 	int apos, row_to_consider, insert = 0;
 
-	#pragma omp parallel for private(apos) shared(insert, row_to_consider)
+	#pragma omp parallel for private(apos) collapse(2) shared(insert, row_to_consider)
 	for(apos = 0; apos < matrix_a->count; )
 	{
 		for(int bpos = 0; bpos < matrix_b->count; )
@@ -186,10 +195,55 @@ int main(int argc, char* argv[])
 	matrix_c.num_rows = matrix_a.num_rows;
 	matrix_c.num_cols = matrix_b.num_cols;
 	matrix_c.count = 0;
+	// ______________________________________________ // 
+	MPI_Init(&argc, &argv);
+	MPI_Comm_size(MPI_COMM_WORLD, &numtasks);
+	MPI_Comm_rank(MPI_COMM_WORLD, &taskid);
 
-	// MPI_Init(&argc, &argv);
-	// MPI_Comm_size(MPI_COMM_WORLD, &num_process);
-	// MPI_Comm_rank(MPI_COMM_WORLD, &id);
+	if (numtasks < 2 ) {
+		printf("Need at least two MPI tasks. Quitting...\n");
+		MPI_Abort(MPI_COMM_WORLD, rc);
+		exit(EXIT_FAILURE);
+	}
+
+	numworkers = numtasks - 1; 
+
+	if(taskid == MASTER)
+	{
+		printf("Master doing stuff\n");
+		averow = matrix_a.count/numworkers;
+		extra = matrix_a.count % numworkers;
+		offset = 0 ;
+		mtype = FROM_MASTER;
+		for(dest = 1; dest<=numworkers; dest++)
+		{
+			rows = (dest <= extra)? averow +1: averow;
+			printf("Sending %d rows to task %d offset=%d\n", rows,dest,offset);
+			MPI_Send(&offset, 1, MPI_INT, dest, mtype, MPI_COMM_WORLD); 
+			MPI_Send(&rows, 1, MPI_INT, dest, mtype, MPI_COMM_WORLD);
+			MPI_Send(&matrix_a.market[0], rows, MPI_FLOAT, dest, mtype, MPI_COMM_WORLD);
+			MPI_Send(&matrix_b.market[0], matrix_b.count, MPI_FLOAT, dest, mtype, MPI_COMM_WORLD);
+			offset +=rows;
+		}
+		mtype = FROM_WORKER;
+		for(i=1; i <= numworkers; ++i)
+		{
+			source =i; 
+			MPI_Recv(&offset, 1, MPI_INT, source, mtype, MPI_COMM_WORLD, &status);
+			MPI_Recv(&rows, 1, MPI_INT, source, mtype, MPI_COMM_WORLD, &status);
+			MPI_Recv(&matrix_c.market[offset], rows, MPI_FLOAT, source, mtype, MPI_COMM_WORLD, &status);
+			printf("Received results from task %d\n",source);
+		}
+	}
+
+	if(taskid > MASTER)
+	{
+		mtype = FROM_MASTER;
+		MPI_Recv(&offset, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD, &status);
+		MPI_Recv(&rows, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD, &status);
+		MPI_Recv(&matrix_a.market, rows, MPI_FLOAT, MASTER, mtype, MPI_COMM_WORLD, &status);
+		MPI_Recv(&matrix_b.market, matrix_b.count, MPI_FLOAT, MASTER, mtype, MPI_COMM_WORLD, &status);
+	} 
 	
 	matrix_multiplication(&matrix_a,&matrix_b,&matrix_c);
 
@@ -197,7 +251,7 @@ int main(int argc, char* argv[])
 	{
 		printf("%d %d %f \n", matrix_c.market[i].row, matrix_c.market[i].col, matrix_c.market[i].val);
 	}
-	printf("%d x %d matrix created: %d enties : multiplication success \n", matrix_c.num_rows, matrix_c.num_cols, matrix_c.count);
+	printf("\n%d x %d matrix created: %d enties : multiplication success \n", matrix_c.num_rows, matrix_c.num_cols, matrix_c.count);
 
 	fclose(file);
 	fclose(file_2);

@@ -167,6 +167,8 @@ int main(int argc, char* argv[])
 	}
 	
 	Matrix matrix_a;
+	Matrix matrix_b;
+	Matrix matrix_c;
 	matrix_a.num_rows = 0;
 	matrix_a.num_cols = 0;
 
@@ -175,23 +177,25 @@ int main(int argc, char* argv[])
 	printf("%d valid entries \n", matrix_a.count);
 	printf("%d x %d matrix created \n", matrix_a.num_rows, matrix_a.num_cols);
 
-	Matrix matrix_b;
 	matrix_b.num_rows = 0;
 	matrix_b.num_cols = 0;
 
 	createMatrixFromFile(&matrix_b, file_2);
 
-	printf("%d valid entries \n", matrix_b.count);
-	printf("%d x %d matrix created \n", matrix_b.num_rows, matrix_b.num_cols);
-
-	
-	Matrix matrix_c;
-	if(matrix_a.num_cols != matrix_b.num_rows)
+	MatrixMarket *mat_c = (MatrixMarket*)malloc(matrix_a->count*sizeof(MatrixMarket)); 
+	if(mat_c == NULL)
 	{
-		fprintf(stderr, "Invalid dimensions to multiply\n");
-		//MPI_Finalize();
-		return EXIT_FAILURE;
+		fprintf(stderr,"Failed to allocate memory\n");
+		MPI_Abort(MPI_COMM_WORLD, rc);
+		exit(EXIT_FAILURE);
 	}
+
+	// if(matrix_a.num_cols != matrix_b.num_rows)
+	// {
+	// 	fprintf(stderr, "Invalid dimensions to multiply\n");
+	// 	//MPI_Finalize();
+	// 	return EXIT_FAILURE;
+	// }
 	matrix_c.num_rows = matrix_a.num_rows;
 	matrix_c.num_cols = matrix_b.num_cols;
 	matrix_c.count = 0;
@@ -210,6 +214,9 @@ int main(int argc, char* argv[])
 
 	if(taskid == MASTER)
 	{
+		printf("%d valid entries \n", matrix_b.count);
+		printf("%d x %d matrix created \n", matrix_b.num_rows, matrix_b.num_cols);
+
 		printf("Master doing stuff\n");
 		averow = matrix_a.count/numworkers;
 		extra = matrix_a.count % numworkers;
@@ -243,9 +250,66 @@ int main(int argc, char* argv[])
 		MPI_Recv(&rows, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD, &status);
 		MPI_Recv(&matrix_a.market, rows, MPI_FLOAT, MASTER, mtype, MPI_COMM_WORLD, &status);
 		MPI_Recv(&matrix_b.market, matrix_b.count, MPI_FLOAT, MASTER, mtype, MPI_COMM_WORLD, &status);
+		
+
+		int apos, row_to_consider, insert = 0;
+		for(apos = offset; apos < rows; )
+		{
+			for(int bpos = 0; bpos < matrix_b->count; )
+			{
+				row_to_consider =  mat_a[apos].row;
+				int col_to_consider = mat_b[bpos].col;
+				int temp_a = apos;
+				int temp_b = bpos;
+
+				float val = 0.0;
+				while(temp_a < rows
+					&& mat_a[temp_a].row == row_to_consider
+					&& temp_b < matrix_b->count
+					&& mat_b[temp_b].col == col_to_consider)
+				{
+					if(mat_a[temp_a].col < mat_b[temp_b].row) temp_a++;
+					else if(mat_a[temp_a].col > mat_b[temp_b].row) temp_b++;
+					else val += (mat_a[temp_a++].val * mat_b[temp_b++].val);
+				}
+				if(val != 0)
+				{
+					MatrixMarket temp; 
+					bool newPos = true;
+
+					for(int i = 0; i < insert; i++)
+					{
+						if(mat_c[i].col == col_to_consider && mat_c[i].row == row_to_consider)
+						{
+							newPos = false;
+							mat_c[i].val += val;
+						}
+					}
+
+					if(newPos)
+					{
+						temp.col = col_to_consider;
+						temp.row = row_to_consider;
+						temp.val = val;
+						mat_c[insert++] = temp;
+					}
+				}
+				while(bpos < matrix_b->count && mat_b[bpos].col == col_to_consider) bpos++;	
+			}
+			while(apos < rows && mat_a[apos].row == row_to_consider) apos++;
+		}
+
+		matrix_c->market = mat_c;
+		matrix_c->count += insert;
+
+		type = FROM_WORKER;
+		MPI_Send(&offset, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD);
+		MPI_Send(&rows, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD);
+		MPI_Send(&matrix_c.market, matr)
 	} 
+	MPI_Finalize();
 	
-	matrix_multiplication(&matrix_a,&matrix_b,&matrix_c);
+//	matrix_multiplication(&matrix_a,&matrix_b,&matrix_c);
 
 	for(int i = 0; i < matrix_c.count; i++)
 	{
@@ -256,6 +320,5 @@ int main(int argc, char* argv[])
 	fclose(file);
 	fclose(file_2);
 
-	// MPI_Finalize();
 	return EXIT_SUCCESS;
 }

@@ -182,7 +182,7 @@ int main(int argc, char* argv[])
 
 	createMatrixFromFile(&matrix_b, file_2);
 
-	MatrixMarket *mat_c = (MatrixMarket*)malloc(matrix_a->count*sizeof(MatrixMarket)); 
+	MatrixMarket *mat_c = (MatrixMarket*)malloc(matrix_a.count*sizeof(MatrixMarket)); 
 	if(mat_c == NULL)
 	{
 		fprintf(stderr,"Failed to allocate memory\n");
@@ -251,11 +251,12 @@ int main(int argc, char* argv[])
 		MPI_Recv(&matrix_a.market, rows, MPI_FLOAT, MASTER, mtype, MPI_COMM_WORLD, &status);
 		MPI_Recv(&matrix_b.market, matrix_b.count, MPI_FLOAT, MASTER, mtype, MPI_COMM_WORLD, &status);
 		
-
+		MatrixMarket *mat_a = matrix_a.market;
+		MatrixMarket *mat_b = matrix_b.market;
 		int apos, row_to_consider, insert = 0;
 		for(apos = offset; apos < rows; )
 		{
-			for(int bpos = 0; bpos < matrix_b->count; )
+			for(int bpos = 0; bpos < matrix_b.count; )
 			{
 				row_to_consider =  mat_a[apos].row;
 				int col_to_consider = mat_b[bpos].col;
@@ -265,7 +266,7 @@ int main(int argc, char* argv[])
 				float val = 0.0;
 				while(temp_a < rows
 					&& mat_a[temp_a].row == row_to_consider
-					&& temp_b < matrix_b->count
+					&& temp_b < matrix_b.count
 					&& mat_b[temp_b].col == col_to_consider)
 				{
 					if(mat_a[temp_a].col < mat_b[temp_b].row) temp_a++;
@@ -294,18 +295,18 @@ int main(int argc, char* argv[])
 						mat_c[insert++] = temp;
 					}
 				}
-				while(bpos < matrix_b->count && mat_b[bpos].col == col_to_consider) bpos++;	
+				while(bpos < matrix_b.count && mat_b[bpos].col == col_to_consider) bpos++;	
 			}
 			while(apos < rows && mat_a[apos].row == row_to_consider) apos++;
 		}
 
-		matrix_c->market = mat_c;
-		matrix_c->count += insert;
+		matrix_c.market = mat_c;
+		matrix_c.count += insert;
 
-		type = FROM_WORKER;
+		mtype = FROM_WORKER;
 		MPI_Send(&offset, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD);
 		MPI_Send(&rows, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD);
-		MPI_Send(&matrix_c.market, matr)
+		//MPI_Send(&matrix_c.market, matr)
 	} 
 	MPI_Finalize();
 	

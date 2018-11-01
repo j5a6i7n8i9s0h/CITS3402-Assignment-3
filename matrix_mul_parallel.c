@@ -135,7 +135,7 @@ void matrix_multiplication(Matrix *matrix_a, Matrix *matrix_b, Matrix *matrix_c)
 int main(int argc, char* argv[])
 {
 	int numtasks, taskid, numworkers, source, dest, mtype;
-	int  rows, averow, extra, offset,i,j,k,rc;
+	int  rows, averow, extra, insert, offset,i,j,k,rc;
 	MPI_Status status;
 	if(argc != 3)
 	{
@@ -245,9 +245,16 @@ int main(int argc, char* argv[])
 			source =i; 
 			MPI_Recv(&offset, 1, MPI_INT, source, mtype, MPI_COMM_WORLD, &status);
 			MPI_Recv(&rows, 1, MPI_INT, source, mtype, MPI_COMM_WORLD, &status);
-			MPI_Recv(&matrix_c.market[offset], rows, mpi_matrix_market, source, mtype, MPI_COMM_WORLD, &status);
+			MPI_Recv(&insert, 1, MPI_INT, source, mtype, MPI_COMM_WORLD,&status);
+			printf("breaks here : insert %d\n",insert);
+			MPI_Recv(&mat_c[offset], insert, mpi_matrix_market, source, mtype, MPI_COMM_WORLD, &status);
+			for(int lp=0;lp<4;lp++)
+			{
+			printf("%f \n",mat_c[lp].val);
+			}
 			printf("Received results from task %d\n",source);
 		}
+		matrix_c.market=mat_c;
 	}
 
 	if(taskid > MASTER)
@@ -259,21 +266,14 @@ int main(int argc, char* argv[])
 		MPI_Recv(matrix_b.market, matrix_b.count, mpi_matrix_market, MASTER, mtype, MPI_COMM_WORLD, &status);
 		MatrixMarket *mat_a = matrix_a.market;
 		MatrixMarket *mat_b = matrix_b.market;
-		for(int jj=0;jj<4;jj++)
-		{
-			printf("%f - mat a \n", mat_a[jj].val);
-		}
-		for(int jj=0;jj<4;jj++)
-		{
-			printf("%f - mat b \n", mat_b[jj].val);
-		}
-		int apos, row_to_consider, insert = 0;
-		printf("offset %d taskid == %d \n",offset, taskid);
+		int apos, row_to_consider;
+		insert = 0;
+
 		for(apos = offset; apos < offset + rows; )
 		{
+			row_to_consider =  mat_a[apos].row;
 			for(int bpos = 0; bpos < matrix_b.count; )
 			{
-				row_to_consider =  mat_a[apos].row;
 				int col_to_consider = mat_b[bpos].col;
 				int temp_a = apos;
 				int temp_b = bpos;
@@ -285,19 +285,19 @@ int main(int argc, char* argv[])
 				{
 					if(mat_a[temp_a].col < mat_b[temp_b].row) temp_a++;
 					else if(mat_a[temp_a].col > mat_b[temp_b].row) temp_b++;
-					else val += (mat_a[temp_a++].val * mat_b[temp_b++].val);
+					else val += mat_a[temp_a++].val * mat_b[temp_b++].val;
 				}
 				if(val != 0)
 				{
 					MatrixMarket temp; 
 					bool newPos = true;
 
-					for(int i = 0; i < insert; i++)
+					for(int ij = 0; ij < offset+insert; ij++)
 					{
-						if(mat_c[i].col == col_to_consider && mat_c[i].row == row_to_consider)
+						if(mat_c[ij].col == col_to_consider && mat_c[ij].row == row_to_consider)
 						{
 							newPos = false;
-							mat_c[i].val += val;
+							mat_c[ij].val += val;
 						}
 					}
 
@@ -306,22 +306,20 @@ int main(int argc, char* argv[])
 						temp.col = col_to_consider;
 						temp.row = row_to_consider;
 						temp.val = val;
-						printf("%f = val MULTIPLY for row = %d, col =%d \n",val, row_to_consider, col_to_consider);
-						mat_c[insert++] = temp;
+						mat_c[offset+insert++] = temp;
 					}
 				}
 				while(bpos < matrix_b.count && mat_b[bpos].col == col_to_consider) bpos++;	
 			}
 			while(apos < offset + rows && mat_a[apos].row == row_to_consider) apos++;
 		}
-
-		matrix_c.market = mat_c;
 		matrix_c.count += insert;
-
+		printf("count = = = %d\n", matrix_c.count);
 		mtype = FROM_WORKER;
 		MPI_Send(&offset, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD);
 		MPI_Send(&rows, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD);
-	//	MPI_Send(&matrix_c.market, insert, mpi_matrix_market, MASTER, mtype, MPI_COMM_WORLD);
+		MPI_Send(&insert, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD);
+		MPI_Send(&mat_c[offset], insert, mpi_matrix_market, MASTER, mtype, MPI_COMM_WORLD);
 	}
 	MPI_Type_free(&mpi_matrix_market); 
 	MPI_Finalize();

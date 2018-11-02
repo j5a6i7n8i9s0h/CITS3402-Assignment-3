@@ -1,17 +1,17 @@
-# CITS3402 Project-1 2018
+# CITS3402 Project-3 2018
 # Names:             Jeremiah Pinto, Jainish Pithadiya, 
 # Student number(s):	21545883, 		21962504
  
-PROJECT = matrix_mul
-OBJ = matrix_mul.o
+PROJECT = project
+OBJ = project.o
 
-# will not compile on OSX
-MPI = mpicc
-FLAGS = -Wall -pedantic -Werror -fopenmp
+# To be used on the cluster
+MPI = mpic++
+FLAGS = -std=c++11 -Wall -pedantic -Werror -fopenmp
 
 $(PROJECT) : $(OBJ)
 	$(MPI) $(FLAGS) -o $(PROJECT) $(OBJ)
-%.o : %.c
+%.o : %.cpp
 	$(MPI) $(FLAGS) -c $<
 
 clean :

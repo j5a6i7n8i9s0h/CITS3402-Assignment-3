@@ -56,6 +56,7 @@ void createMatrixFromFile(Matrix *matrix, ifstream &file, int count)
 	if(matrix->market == NULL)
 	{
 		cerr << "Failure to allocate memory\n";
+		MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
 		exit(EXIT_FAILURE);
 	}
 

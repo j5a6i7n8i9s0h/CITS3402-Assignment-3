@@ -44,13 +44,12 @@ int getLineCount(ifstream &file)
 }
 
 // Function to create a matrix from the file sent as a parameter
-void createMatrixFromFile(Matrix *matrix, ifstream &file)
+void createMatrixFromFile(Matrix *matrix, ifstream &file, int count)
 {
 	string buff;
 	int row, col; 
 	double val;
 	int i = 0;
-	int count = getLineCount(file);
 	MatrixMarket temp;
 	matrix->market = (MatrixMarket*)malloc(count*sizeof(MatrixMarket)); 
 
@@ -154,8 +153,8 @@ int main(int argc, char *argv[])
 		Matrix matrix_b = { };
 		Matrix matrix_c = { };
 
-		createMatrixFromFile(&matrix_a, file_1);
-		createMatrixFromFile(&matrix_b, file_2);
+		createMatrixFromFile(&matrix_a, file_1, file_1_lines);
+		createMatrixFromFile(&matrix_b, file_2, file_2_lines);
 
 		mat_a = matrix_a.market;
 		mat_b = matrix_b.market;
